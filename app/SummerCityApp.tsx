@@ -172,14 +172,6 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function areaFromCoords(latitude: number, longitude: number) {
-  if (latitude > 37.56 && longitude < 126.95) return "연남";
-  if (latitude > 37.53 && longitude > 127.03) return "성수";
-  if (latitude < 37.52 && longitude > 127.07) return "잠실";
-  if (longitude < 126.95) return "망원";
-  return "내 근처";
-}
-
 export function SummerCityApp() {
   const [mission, setMission] = useState<Mission>(missions[0]);
   const [acceptedMission, setAcceptedMission] = useState<Mission | null>(null);
@@ -195,24 +187,37 @@ export function SummerCityApp() {
   const [shareState, setShareState] = useState("공유문구");
 
   useEffect(() => {
-    const storedPosts = window.localStorage.getItem("summer-city-posts");
-    const storedCount = window.localStorage.getItem("summer-city-count");
+    try {
+      const storedPosts = window.sessionStorage.getItem("summer-city-posts");
+      const storedCount = window.sessionStorage.getItem("summer-city-count");
 
-    if (storedPosts) {
-      setPosts(JSON.parse(storedPosts) as Post[]);
-    }
+      if (storedPosts) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore this tab's optional demo state after hydration.
+        setPosts(JSON.parse(storedPosts) as Post[]);
+      }
 
-    if (storedCount) {
-      setCompletedCount(Number(storedCount));
+      if (storedCount) {
+        setCompletedCount(Number(storedCount));
+      }
+    } catch {
+      // The public demo remains usable when browser storage is unavailable.
     }
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("summer-city-posts", JSON.stringify(posts));
+    try {
+      window.sessionStorage.setItem("summer-city-posts", JSON.stringify(posts));
+    } catch {
+      // Session persistence is optional.
+    }
   }, [posts]);
 
   useEffect(() => {
-    window.localStorage.setItem("summer-city-count", String(completedCount));
+    try {
+      window.sessionStorage.setItem("summer-city-count", String(completedCount));
+    } catch {
+      // Session persistence is optional.
+    }
   }, [completedCount]);
 
   const visiblePosts = useMemo(() => {
@@ -228,28 +233,11 @@ export function SummerCityApp() {
 
   const todayProgress = Math.min(100, completedCount * 16 + 24);
 
-  function useNearbyLocation() {
-    setLocationState("위치 확인 중");
-
-    if (!navigator.geolocation) {
-      setLocationState("위치 미지원");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const nextArea = areaFromCoords(
-          position.coords.latitude,
-          position.coords.longitude,
-        );
-        setNeighborhood(nextArea);
-        setLocationState("내 주변");
-      },
-      () => {
-        setLocationState("동네 선택");
-      },
-      { enableHighAccuracy: false, maximumAge: 1000 * 60 * 10, timeout: 7000 },
-    );
+  function cycleDemoNeighborhood() {
+    const currentIndex = localAreas.findIndex((area) => area.name === neighborhood);
+    const nextArea = localAreas[(currentIndex + 1) % localAreas.length] ?? localAreas[0];
+    setNeighborhood(nextArea.name);
+    setLocationState("체험 지역");
   }
 
   function completeMission() {
@@ -304,15 +292,19 @@ export function SummerCityApp() {
 
   return (
     <main className="app-shell">
+      <aside className="public-demo-notice" aria-label="공개 체험 안내">
+        <strong>공개 체험</strong>
+        <span>위치 권한은 사용하지 않으며, 작성한 내용은 서버로 전송되지 않고 이 탭을 닫으면 사라져요. 개인정보는 입력하지 마세요.</span>
+      </aside>
       <section className="top-band" aria-label="오늘여름 홈">
         <nav className="app-nav" aria-label="앱 메뉴">
           <div>
             <p className="eyebrow">도시 안의 여름</p>
             <h1>오늘여름</h1>
           </div>
-          <button className="icon-button" type="button" onClick={useNearbyLocation}>
+          <button className="icon-button" type="button" onClick={cycleDemoNeighborhood}>
             <span aria-hidden="true">⌖</span>
-            <span className="sr-only">내 위치 사용</span>
+            <span className="sr-only">체험 지역 바꾸기</span>
           </button>
         </nav>
 
@@ -478,7 +470,7 @@ export function SummerCityApp() {
           <form className="composer" onSubmit={submitPost} aria-label="여름 기록 작성">
             <div className="panel-row">
               <span className="location-chip">{neighborhood}</span>
-              <span className="meta-text">내 여름 기록</span>
+              <span className="meta-text">이 탭의 체험 기록</span>
             </div>
             <label>
               <span>제목</span>
@@ -510,7 +502,7 @@ export function SummerCityApp() {
               />
             </label>
             <button className="primary-button" type="submit">
-              피드에 올리기
+              브라우저 피드에 추가
             </button>
           </form>
         </div>
